@@ -13,8 +13,15 @@ kotlin {
     jvm {}
     js {
         nodejs {}
-        browser {}
+        browser {
+            testTask {
+                useKarma {
+                    useChromium()
+                }
+            }
+        }
     }
+    linuxX64 {}
 
     sourceSets {
         commonMain {

@@ -1,4 +1,6 @@
-package ru.spbstu
+package ru.spbstu.test
+
+import ru.spbstu.*
 
 import kotlin.test.Test
 import kotlin.time.ExperimentalTime
