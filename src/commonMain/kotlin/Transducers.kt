@@ -2,10 +2,11 @@ package ru.spbstu
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.fold
+import ru.spbstu.wheels.*
 
-typealias Reducer<A, B> = (A?, B?) -> A?
+typealias Reducer<A, B> = (Option<A>, Option<B>) -> Option<A>
 
-inline fun <A, B> Reducer(crossinline reducer: Reducer<A, B>): Reducer<A, B> = { a: A?, b: B? ->
+inline fun <A, B> Reducer(crossinline reducer: Reducer<A, B>): Reducer<A, B> = { a: Option<A>, b: Option<B> ->
     //check(a === null || b !== null)
     reducer(a, b)
 }
@@ -14,35 +15,33 @@ typealias Transducer<A, B, C> = (Reducer<A, C>) -> Reducer<A, B>
 inline fun <A, B> idT(): Transducer<A, B, B> = { r -> r }
 
 inline fun <A, B> filterT(crossinline pred: (B) -> Boolean): Transducer<A, B, B> = { reducer ->
-    Reducer { a: A?, b: B? ->
-        when {
-            a === null || b === null -> reducer(a, b)
-            else -> if (pred(b)) reducer(a, b) else a
-        }
+    Reducer { a: Option<A>, b: Option<B> ->
+        if (b.map(pred).getOrElse { true }) reducer(a, b)
+        else a
     }
 }
 
 inline fun <T> toSequenceR(): Reducer<Sequence<T>, T> = Reducer { a, b ->
     when {
-        a === null -> emptySequence()
-        b === null -> a
-        else -> a + b
+        a.isEmpty() -> Option.just(emptySequence())
+        b.isEmpty() -> a
+        else -> a.zip(b, Sequence<T>::plusElement)
     }
 }
 
 inline fun <T, C : MutableCollection<T>> toR(collection: C): Reducer<C, T> = Reducer { a, b ->
     when {
-        a === null -> collection
-        b === null -> a
-        else -> a.also { it.add(b) }
+        a.isEmpty() -> Option.just(collection)
+        b.isEmpty() -> a
+        else -> a.also { a.zip(b) { _, e -> collection.add(e) } }
     }
 }
 
 inline fun <T> sumByR(crossinline body: (T) -> Int): Reducer<Int, T> = Reducer { a, b ->
     when {
-        a === null -> 0
-        b === null -> a
-        else -> a + body(b)
+        a.isEmpty() -> Option.just(0)
+        b.isEmpty() -> a
+        else -> a.zip(b) { ax, bx -> ax + body(bx) }
     }
 }
 
@@ -65,48 +64,43 @@ inline class TransducerBuilder<A, B, C> constructor(inline val t: Transducer<A, 
     inline fun <D> combineWith(crossinline rhv: Transducer<A, C, D>): TransducerBuilder<A, B, D> =
         TransducerBuilder(combine(t, rhv))
 
-    inline fun <D> combineWith(crossinline rhv: (Reducer<A, D>, a: A?, c: C?) -> A?): TransducerBuilder<A, B, D> =
-        combineWith { reducer -> { a: A?, c: C? -> rhv(reducer, a, c) } }
+    inline fun <D> combineWith(crossinline rhv: (Reducer<A, D>, a: Option<A>, c: Option<C>) -> Option<A>): TransducerBuilder<A, B, D> =
+        combineWith { reducer -> { a: Option<A>, c: Option<C> -> rhv(reducer, a, c) } }
 
     inline fun <D> map(crossinline body: (C) -> D): TransducerBuilder<A, B, D> =
         combineWith { reducer, a, b ->
             when {
-                a === null || b === null -> reducer(a, null)
-                else -> reducer(a, body(b))
+                a.isEmpty() || b.isEmpty() -> reducer(a, Option.empty())
+                else -> reducer(a, b.map(body))
             }
         }
 
     inline fun filter(crossinline body: (C) -> Boolean): TransducerBuilder<A, B, C> =
         combineWith { reducer, a, b ->
-            when {
-                a === null || b === null -> reducer(a, b)
-                else -> if (body(b)) reducer(a, b) else a
-            }
+            if (b.map(body).getOrElse { true }) reducer(a, b) else a
         }
 
     inline fun take(n: Int): TransducerBuilder<A, B, C> =
         combineWith { reducer ->
             var i = 0
-            { a: A?, b: C? ->
-                when {
-                    a === null || b === null -> reducer(a, null)
-                    else -> {
-                        ++i
-                        if (i <= n) reducer(a, b)
-                        else null
-                    }
-                }
+            { a: Option<A>, b: Option<C> ->
+                ++i
+                if (i <= n) reducer(a, b)
+                else Option.empty()
             }
         }
 
     inline fun <D> flatMap(crossinline body: (C) -> Iterable<D>): TransducerBuilder<A, B, D> =
         combineWith { reducer, a, b ->
             when {
-                a === null || b === null -> reducer(a, null)
+                a.isEmpty() -> reducer(a, Option.empty())
                 else -> {
-                    var acc: A? = null
-                    for (e in body(b)) acc = reducer(a, e)
-                    acc!!
+                    var acc: Option<A> = Option.empty()
+                    val bvalues = b.map(body)
+                    for (iterable in bvalues)
+                        for (e in iterable)
+                            acc = reducer(a, Option.just(e))
+                    acc
                 }
             }
         }
@@ -119,9 +113,9 @@ inline class TransducerBuilder<A, B, C> constructor(inline val t: Transducer<A, 
 inline fun <B, T> TransducerBuilder<Sequence<T>, B, T>.toSequence(): TransducerBuilderResult<Sequence<T>, B> =
     terminateWith { a, b ->
         when {
-            a === null -> emptySequence()
-            b === null -> a
-            else -> a + b
+            a.isEmpty() -> Option.just(emptySequence())
+            b.isEmpty() -> a
+            else -> a.zip(b, Sequence<T>::plusElement)
         }
     }
 
@@ -130,7 +124,9 @@ inline fun <B, T, C : MutableCollection<T>> TransducerBuilder<C, B, T>.into(coll
     TransducerBuilderResult(t(toR(collection)))
 
 inline fun <B> TransducerBuilder<Int, B, Int>.sum(): TransducerBuilderResult<Int, B> =
-    terminateWith { a: Int?, b: Int? -> (a ?: 0) + (b ?: 0) }
+    terminateWith { a, b ->
+        Option.just(a.getOrElse { 0 } + b.getOrElse { 0 })
+    }
 
 inline fun <A, B, C> transducer(body: TransducerBuilder<A, B, B>.() -> TransducerBuilderResult<A, C>): Reducer<A, C> {
     return TransducerBuilder<A, B, B>(idT()).body().result
@@ -138,16 +134,24 @@ inline fun <A, B, C> transducer(body: TransducerBuilder<A, B, B>.() -> Transduce
 
 inline fun <T, reified R> Sequence<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R {
     val reducer = transducer(body)
-    var accumulator: R? = null
-    for (element in this) accumulator = reducer(accumulator, element) ?: break
-    return accumulator ?: reducer(null, null) as R
+    var accumulator: Option<R> = Option.empty()
+    for (element in this) {
+        val interm = reducer(accumulator, Option.just(element))
+        if (interm.isEmpty()) break
+        accumulator = interm
+    }
+    return accumulator.getOrElse { reducer(Option.empty(), Option.empty()).get() }
 }
 
 inline fun <T, reified R> Iterable<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R {
     val reducer = transducer(body)
-    var accumulator: R? = null
-    for (element in this) accumulator = reducer(accumulator, element) ?: break
-    return accumulator ?: reducer(null, null) as R
+    var accumulator: Option<R> = Option.empty()
+    for (element in this) {
+        val interm = reducer(accumulator, Option.just(element))
+        if (interm.isEmpty()) break
+        accumulator = interm
+    }
+    return accumulator.getOrElse { reducer(Option.empty(), Option.empty()).get() }
 }
 
 @PublishedApi
@@ -157,10 +161,12 @@ suspend inline fun <T, reified R> Flow<T>.transduce(body: TransducerBuilder<R, T
     val reducer: Reducer<R, T> = transducer(body)
 
     return try {
-        this.fold<T, R?>(null) { a, e ->
-            reducer(a, e) ?: throw StopException(a)
-        } ?: reducer(null, null) as R
+        this.fold<T, Option<R>>(Option.empty()) { a, e ->
+            reducer(a, Option.just(e)).orElse { throw StopException(a) }
+        }.getOrElse { reducer(Option.empty(), Option.empty()).get() }
     } catch (ex: StopException) {
         ex.value as R
     }
 }
+
+
