@@ -1,5 +1,6 @@
 plugins {
     id 'org.jetbrains.kotlin.multiplatform' version '1.4.10'
+    id 'kotlinx.benchmark' version '0.2.0-dev-20'
 }
 
 group 'ru.spbstu'
@@ -7,6 +8,7 @@ version '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
+    maven { url = 'https://dl.bintray.com/kotlin/kotlinx' }
 }
 
 kotlin {
@@ -24,10 +26,21 @@ kotlin {
     linuxX64 {}
 
     sourceSets {
+        all {
+            languageSettings {
+                languageVersion = "1.4"
+                apiVersion = "1.4"
+                enableLanguageFeature("InlineClasses")
+                useExperimentalAnnotation("kotlin.RequiresOptIn")
+                useExperimentalAnnotation("kotlin.ExperimentalUnsignedTypes")
+                useExperimentalAnnotation("kotlin.ExperimentalStdlibApi")
+            }
+        }
         commonMain {
             dependencies {
                 implementation kotlin('stdlib-common')
                 implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.9'
+                implementation 'org.jetbrains.kotlinx:kotlinx.benchmark.runtime:0.2.0-dev-20'
             }
         }
         commonTest {
@@ -49,5 +62,18 @@ kotlin {
                 api("org.jetbrains.kotlin:kotlin-test-js")
             }
         }
+    }
+}
+
+benchmark {
+    configurations {
+        named("main") {
+            iterations = 20
+        }
+    }
+    targets {
+        register("jvm")
+        register("js")
+        //register("linuxX64")
     }
 }
