@@ -4,8 +4,6 @@ import ru.spbstu.*
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.time.ExperimentalTime
-import kotlin.time.measureTime
 
 inline fun <T, U> Sequence<T>.altMap(crossinline body: (T) -> U) = sequence {
     for (e in this@altMap) yield(body(e))
@@ -44,9 +42,9 @@ class TransducersTest {
             bench.setup()
             val a = bench.heavySequence()
             bench.setup()
-            val b = bench.heavyStd()
+            val b = bench.heavyStandard()
             bench.setup()
-            val c = bench.heavyTransduced()
+            val c = bench.heavyTransducer()
             assertEquals(b, a)
             assertEquals(b, c)
         }
@@ -66,11 +64,11 @@ class TransducersTest {
         run {
             val bench = TestBenchmark()
             bench.setup()
-            val a = bench.mapFlatSeq()
+            val a = bench.mapFlatSequence()
             bench.setup()
-            val b = bench.mapFlat()
+            val b = bench.mapFlatStandard()
             bench.setup()
-            val c = bench.mapFlatting()
+            val c = bench.mapFlatTransducer()
             assertEquals(b, a)
             assertEquals(b, c)
             val d = bench.mapFlatLambdaHandInlined()

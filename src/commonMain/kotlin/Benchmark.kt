@@ -23,7 +23,6 @@ open class TestBenchmark {
     lateinit var strList: List<String>
     lateinit var seq: Sequence<Int>
     lateinit var rangeList: List<Int>
-    lateinit var conjLambda: Reducer<MutableList<Int>, Int>
 
     @Setup
     fun setup() {
@@ -32,7 +31,6 @@ open class TestBenchmark {
         strList = listOf("123", "456", "78")
         seq = IntRange(0, 1000).asSequence()
         rangeList = IntRange(0, 1000).toList()
-        conjLambda = { a: MutableList<Int>?, b: Int? -> a?.apply { b?.let(::add) } }
     }
 
     @Benchmark
@@ -119,7 +117,7 @@ open class TestBenchmark {
     }
 
     @Benchmark
-    fun mapFlatSeq(): List<Int> {
+    fun mapFlatSequence(): List<Int> {
 
         return strList
             .asSequence()
@@ -130,7 +128,7 @@ open class TestBenchmark {
     }
 
     @Benchmark
-    fun mapFlatting(): List<Int> {
+    fun mapFlatTransducer(): List<Int> {
         return strList.transduce {
             flatMap { it.toList() }
                 .map { it.toInt() }
@@ -183,7 +181,7 @@ open class TestBenchmark {
     }
 
     @Benchmark
-    fun mapFlat(): List<Int> {
+    fun mapFlatStandard(): List<Int> {
 
         return strList
             .flatMap { it.toList() }
@@ -196,7 +194,7 @@ open class TestBenchmark {
     }*/
 
     @Benchmark
-    fun heavyTransduced(): List<Int> {
+    fun heavyTransducer(): List<Int> {
         return strList.transduce {
             flatMap { it.toList() }
                 .map { it.toInt() }
@@ -205,6 +203,29 @@ open class TestBenchmark {
                 .take(80)
                 .toList()
         }
+    }
+
+    @Benchmark
+    fun heavyTransducerInlined(): List<Int> {
+        val m = mutableListOf<Int>()
+        var i = 0
+        var accumulator: List<Int>? = null
+        for (element in strList) {
+            accumulator = run {
+                var acc = accumulator
+                for (e in element.toList()) acc = run {
+                    var acc1: List<Int>? = acc
+                    for (e in IntRange(0, e.toInt() * 10)) acc1 = if (e % 2 == 0) {
+                        ++i
+                        if (i <= 80) m.apply { add(e) }
+                        else null
+                    } else acc1
+                    acc1
+                }
+                acc
+            } ?: break
+        }
+        return accumulator ?: m
     }
 
     @Benchmark
@@ -220,7 +241,7 @@ open class TestBenchmark {
     }
 
     @Benchmark
-    fun heavyStd(): List<Int> {
+    fun heavyStandard(): List<Int> {
         return strList
             .flatMap { it.toList() }
             .map { it.toInt() }
@@ -230,7 +251,7 @@ open class TestBenchmark {
     }
 
     @Benchmark //avg 163.5 ops/ms
-    fun simpleTrans(): List<Int> {
+    fun simpleTransducer(): List<Int> {
         return rangeList.transduce {
             map { it * 2 }
                 .filter { it % 3 == 0 }
@@ -239,8 +260,26 @@ open class TestBenchmark {
         }
     }
 
+    @Benchmark //avg 163.5 ops/ms
+    fun simpleTransducerInlined(): List<Int> {
+        val m = mutableListOf<Int>()
+        var i = 0
+        var accumulator: List<Int>? = null
+        for (element in rangeList) {
+            accumulator = run {
+                val p2 = element * 2
+                if (p2 % 3 == 0) {
+                    ++i
+                    if (i <= 1000) m.apply { add(p2) }
+                    else null
+                } else accumulator
+            } ?: break
+        }
+        return accumulator ?: m
+    }
+
     @Benchmark // avg 134 ops/ms
-    fun simpleSeq(): List<Int> {
+    fun simpleSequence(): List<Int> {
         return seq
             .map { it * 2 }
             .filter { it % 3 == 0 }
