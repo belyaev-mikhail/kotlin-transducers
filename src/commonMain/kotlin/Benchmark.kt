@@ -39,7 +39,7 @@ open class TestBenchmark {
     fun trivialTransducer(): List<String> {
         return list
             .transduce {
-                map { println(it); it.showDoubledString() }
+                map { it.showDoubledString() }
                     .filter { !it.startsWith("3") }
                     .take(2)
                     .toList()
@@ -64,6 +64,27 @@ open class TestBenchmark {
             .map { it.showDoubledString() }
             .filter { !it.startsWith("3") }
             .take(2)
+    }
+
+    @Benchmark
+    fun flatMapTransducerInlined(): List<Int> {
+        val m = mutableListOf<Int>()
+        var i = 0
+        var accumulator: List<Int>? = null
+        for (element in listList) {
+            accumulator = when {
+                else -> {
+                    var acc: List<Int>? = accumulator
+                    for (e in element) acc = run {
+                        ++i
+                        if (i <= 8) m.apply { add(e * 10) }
+                        else null
+                    }
+                    acc
+                }
+            } ?: break
+        }
+        return accumulator ?: m
     }
 
     @Benchmark

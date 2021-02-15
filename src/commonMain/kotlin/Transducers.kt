@@ -1,15 +1,14 @@
 package ru.spbstu
 
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.fold
+import kotlinx.coroutines.flow.*
 
-typealias Reducer<A, B> = (A?, B) -> A?
+typealias Reducer<Acc, E> = (Acc?, E) -> Acc?
 
 inline fun <A, B> Reducer(crossinline reducer: Reducer<A, B>): Reducer<A, B> = { a: A?, b: B ->
     //check(a === null || b !== null)
     reducer(a, b)
 }
-typealias Transducer<A, B, C> = (Reducer<A, C>) -> Reducer<A, B>
+typealias Transducer<Acc, E1, E2> = (Reducer<Acc, E2>) -> Reducer<Acc, E1>
 
 inline fun <A, B> idT(): Transducer<A, B, B> = { r -> r }
 
@@ -46,7 +45,7 @@ data class TransducerBuilderResult<A, B>(
     internal val result: Reducer<A, B>
 )
 
-inline class TransducerBuilder<A, B, C> constructor(inline val t: Transducer<A, B, C>) {
+inline class TransducerBuilder<Acc, E1, E2> constructor(inline val t: Transducer<Acc, E1, E2>) {
     companion object {
         inline fun <A, B, C, D> combine(
             crossinline lhv: Transducer<A, B, C>,
@@ -56,36 +55,36 @@ inline class TransducerBuilder<A, B, C> constructor(inline val t: Transducer<A, 
         }
     }
 
-    inline fun <D> combineWith(crossinline rhv: Transducer<A, C, D>): TransducerBuilder<A, B, D> =
+    inline fun <E3> combineWith(crossinline rhv: Transducer<Acc, E2, E3>): TransducerBuilder<Acc, E1, E3> =
         TransducerBuilder(combine(t, rhv))
 
-    inline fun <D> combineWith(crossinline rhv: (Reducer<A, D>, a: A?, c: C) -> A?): TransducerBuilder<A, B, D> =
-        combineWith { reducer -> { a: A?, c: C -> rhv(reducer, a, c) } }
+    inline fun <E3> combineWith(crossinline rhv: (Reducer<Acc, E3>, a: Acc?, c: E2) -> Acc?): TransducerBuilder<Acc, E1, E3> =
+        combineWith { reducer -> { a: Acc?, c: E2 -> rhv(reducer, a, c) } }
 
-    inline fun <D> map(crossinline body: (C) -> D): TransducerBuilder<A, B, D> =
+    inline fun <E3> map(crossinline body: (E2) -> E3): TransducerBuilder<Acc, E1, E3> =
         combineWith { reducer, a, b -> reducer(a, body(b)) }
 
-    inline fun filter(crossinline body: (C) -> Boolean): TransducerBuilder<A, B, C> =
+    inline fun filter(crossinline body: (E2) -> Boolean): TransducerBuilder<Acc, E1, E2> =
         combineWith { reducer, a, b -> if (body(b)) reducer(a, b) else a }
 
-    inline fun take(n: Int): TransducerBuilder<A, B, C> =
+    inline fun take(n: Int): TransducerBuilder<Acc, E1, E2> =
         combineWith { reducer ->
             var i = 0
-            { a: A?, b: C ->
+            { a: Acc?, b: E2 ->
                 ++i
                 if (i <= n) reducer(a, b)
                 else null
             }
         }
 
-    inline fun <D> flatMap(crossinline body: (C) -> Iterable<D>): TransducerBuilder<A, B, D> =
+    inline fun <E3> flatMap(crossinline body: (E2) -> Iterable<E3>): TransducerBuilder<Acc, E1, E3> =
         combineWith { reducer, a, b ->
-            var acc: A? = a
+            var acc: Acc? = a
             for (e in body(b)) acc = reducer(acc, e)
             acc
         }
 
-    inline fun terminateWith(default: A, noinline reducer: Reducer<A, C>): TransducerBuilderResult<A, B> =
+    inline fun terminateWith(default: Acc, noinline reducer: Reducer<Acc, E2>): TransducerBuilderResult<Acc, E1> =
         TransducerBuilderResult(default, t(reducer))
 }
 
@@ -124,16 +123,7 @@ inline fun <A, B, C> transducer(body: TransducerBuilder<A, B, B>.() -> Transduce
     return TransducerBuilder<A, B, B>(idT()).body()
 }
 
-inline fun <T, reified R> Sequence<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R {
-    val res = transducer(body)
-    val reducer = res.result
-    val default = res.default
-    var accumulator: R? = null
-    for (element in this) accumulator = reducer(accumulator, element) ?: break
-    return accumulator ?: default
-}
-
-inline fun <T, reified R> Iterable<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R {
+inline fun <T, reified R> Iterator<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R {
     val res = transducer(body)
     val reducer = res.result
     val default = res.default
@@ -143,6 +133,12 @@ inline fun <T, reified R> Iterable<T>.transduce(body: TransducerBuilder<R, T, T>
     }
     return accumulator ?: default
 }
+
+inline fun <T, reified R> Sequence<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R =
+    iterator().transduce(body)
+
+inline fun <T, reified R> Iterable<T>.transduce(body: TransducerBuilder<R, T, T>.() -> TransducerBuilderResult<R, T>): R =
+    iterator().transduce(body)
 
 @PublishedApi
 internal class StopException(val value: Any?) : Throwable()
