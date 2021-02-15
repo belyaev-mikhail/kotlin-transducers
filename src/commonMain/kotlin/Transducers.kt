@@ -80,7 +80,7 @@ inline class TransducerBuilder<Acc, E1, E2> constructor(inline val t: Transducer
     inline fun <E3> flatMap(crossinline body: (E2) -> Iterable<E3>): TransducerBuilder<Acc, E1, E3> =
         combineWith { reducer, a, b ->
             var acc: Acc? = a
-            for (e in body(b)) acc = reducer(acc, e)
+            for (e in body(b)) acc = reducer(acc, e) ?: break
             acc
         }
 
@@ -93,7 +93,7 @@ inline fun <E, A, B> TransducerBuilder<A, B, List<E>>.flatten(): TransducerBuild
         when {
             else -> {
                 var acc: A? = a
-                for (e in b) acc = reducer(acc, e)
+                for (e in b) acc = reducer(acc, e) ?: break
                 acc
             }
         }

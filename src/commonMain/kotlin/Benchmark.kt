@@ -34,6 +34,24 @@ open class TestBenchmark {
     }
 
     @Benchmark
+    fun trivialTransducerInlined(): List<String> {
+        val m = mutableListOf<String>()
+        var i = 0
+        var accumulator: List<String>? = null
+        for (element in list.iterator()) {
+            accumulator = run {
+                val p2 = element.showDoubledString()
+                if (!p2.startsWith("3")) {
+                    ++i
+                    if (i <= 2) m.apply { add(p2) }
+                    else null
+                } else accumulator
+            } ?: break
+        }
+        return accumulator ?: m
+    }
+
+    @Benchmark
     fun trivialTransducer(): List<String> {
         return list
             .transduce {
@@ -77,7 +95,7 @@ open class TestBenchmark {
                         ++i
                         if (i <= 8) m.apply { add(e * 10) }
                         else null
-                    }
+                    } ?: break
                     acc
                 }
             } ?: break
@@ -156,7 +174,7 @@ open class TestBenchmark {
                         if (b > 3) {
                             m.apply { add(b) }
                         } else a
-                    }
+                    } ?: break
                 }
                 acc
             } ?: break
@@ -210,18 +228,22 @@ open class TestBenchmark {
         val m = mutableListOf<Int>()
         var i = 0
         var accumulator: List<Int>? = null
-        for (element in strList) {
+        for (element in strList.iterator()) {
             accumulator = run {
                 var acc = accumulator
                 for (e in element.toList()) acc = run {
-                    var acc1: List<Int>? = acc
-                    for (e in IntRange(0, e.toInt() * 10)) acc1 = if (e % 2 == 0) {
+                    var acc1 = acc
+                    for (e in IntRange(0, e.toInt() * 10)) acc1 = (if (e % 2 == 0) {
                         ++i
-                        if (i <= 80) m.apply { add(e) }
+                        if (i <= 80) m.apply {
+                            add(
+                                e
+                            )
+                        }
                         else null
-                    } else acc1
+                    } else acc1) ?: break
                     acc1
-                }
+                } ?: break
                 acc
             } ?: break
         }

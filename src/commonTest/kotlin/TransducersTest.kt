@@ -22,6 +22,8 @@ inline fun <T> Sequence<T>.altTake(n: Int) = sequence {
     }
 }
 
+fun <T> assertAllEquals(expected: T, vararg actuals: T) = actuals.forEach { assertEquals(expected, it) }
+
 class TransducersTest {
     @Test
     fun benchTest() {
@@ -33,8 +35,9 @@ class TransducersTest {
             val b = bench.trivialStandard()
             bench.setup()
             val c = bench.trivialTransducer()
-            assertEquals(b, a)
-            assertEquals(b, c)
+            bench.setup()
+            val d = bench.trivialTransducerInlined()
+            assertAllEquals(b, a, c, d)
         }
 
         run {
@@ -45,8 +48,9 @@ class TransducersTest {
             val b = bench.heavyStandard()
             bench.setup()
             val c = bench.heavyTransducer()
-            assertEquals(b, a)
-            assertEquals(b, c)
+            bench.setup()
+            val d = bench.heavyTransducerInlined()
+            assertAllEquals(b, a, c, d)
         }
 
         run {
@@ -57,8 +61,9 @@ class TransducersTest {
             val b = bench.flatMapStandard()
             bench.setup()
             val c = bench.flatMapTransducer()
-            assertEquals(b, a)
-            assertEquals(b, c)
+            bench.setup()
+            val d = bench.flatMapTransducerInlined()
+            assertAllEquals(b, a, c, d)
         }
 
         run {
@@ -69,12 +74,11 @@ class TransducersTest {
             val b = bench.mapFlatStandard()
             bench.setup()
             val c = bench.mapFlatTransducer()
-            assertEquals(b, a)
-            assertEquals(b, c)
+            bench.setup()
             val d = bench.mapFlatLambdaHandInlined()
-            assertEquals(b, d)
+            bench.setup()
             val e = bench.mapFlatHandInlined()
-            assertEquals(b, e)
+            assertAllEquals(b, a, c, d, e)
         }
 
     }
