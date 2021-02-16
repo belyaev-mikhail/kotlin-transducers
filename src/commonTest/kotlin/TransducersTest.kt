@@ -75,10 +75,8 @@ class TransducersTest {
             bench.setup()
             val c = bench.mapFlatTransducer()
             bench.setup()
-            val d = bench.mapFlatLambdaHandInlined()
-            bench.setup()
             val e = bench.mapFlatHandInlined()
-            assertAllEquals(b, a, c, d, e)
+            assertAllEquals(b, a, c, e)
         }
 
     }
