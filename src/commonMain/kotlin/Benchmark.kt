@@ -1,6 +1,9 @@
 package ru.spbstu
 
 import kotlinx.benchmark.*
+import ru.spbstu.alt.*
+import ru.spbstu.alt.TransducerAlt
+import ru.spbstu.alt.transduceAlt
 
 //TODO: sequence
 
@@ -49,6 +52,17 @@ open class TestBenchmark {
             } ?: break
         }
         return accumulator ?: m
+    }
+
+    @Benchmark
+    fun trivialTransducerAlt(): List<String> {
+        return list
+            .transduceAlt {
+                map { it.showDoubledString() }
+                    .filter { !it.startsWith("3") }
+                    .take(2)
+                    .toList()
+            }
     }
 
     @Benchmark
@@ -104,6 +118,16 @@ open class TestBenchmark {
     }
 
     @Benchmark
+    fun flatMapTransducerAlt(): List<Int> {
+        return listList.transduceAlt {
+            flatten()
+                .map { it * 10 }
+                .take(8)
+                .toList()
+        }
+    }
+
+    @Benchmark
     fun flatMapTransducer(): List<Int> {
         return listList.transduce {
             flatten()
@@ -146,8 +170,8 @@ open class TestBenchmark {
     }
 
     @Benchmark
-    fun mapFlatTransducer(): List<Int> {
-        return strList.transduce {
+    fun mapFlatTransducerAlt(): List<Int> {
+        return strList.transduceAlt {
             flatMap { it.toList() }
                 .map { it.toInt() }
                 .filter { it > 3 }
@@ -156,30 +180,13 @@ open class TestBenchmark {
     }
 
     @Benchmark
-    fun mapFlatLambdaHandInlined(): List<Int> {
-        val m = mutableListOf<Int>()
-
-        val default = m
-        var accumulator: List<Int>? = null
-        for (element in strList) {
-            accumulator = run {
-                val a = accumulator
-                val b = element
-                var acc: List<Int>? = a
-                for (e in b.toList()) {
-                    val a = acc
-                    val b = e
-                    acc = run {
-                        val b = b.toInt()
-                        if (b > 3) {
-                            m.apply { add(b) }
-                        } else a
-                    } ?: break
-                }
-                acc
-            } ?: break
+    fun mapFlatTransducer(): List<Int> {
+        return strList.transduce {
+            flatMap { it.toList() }
+                .map { it.toInt() }
+                .filter { it > 3 }
+                .toList()
         }
-        return accumulator ?: default
     }
 
     @Benchmark
@@ -210,6 +217,18 @@ open class TestBenchmark {
     /*@Benchmark
     fun empty() {
     }*/
+
+    @Benchmark
+    fun heavyTransducerAlt(): List<Int> {
+        return strList.transduceAlt {
+            flatMap { it.toList() }
+                .map { it.toInt() }
+                .flatMap { IntRange(0, it * 10) }
+                .filter { it % 2 == 0 }
+                .take(80)
+                .toList()
+        }
+    }
 
     @Benchmark
     fun heavyTransducer(): List<Int> {
@@ -270,6 +289,16 @@ open class TestBenchmark {
             .flatMap { IntRange(0, it * 10) }
             .filter { it % 2 == 0 }
             .take(80)
+    }
+
+    @Benchmark //avg 163.5 ops/ms
+    fun simpleTransducerAlt(): List<Int> {
+        return rangeList.transduceAlt {
+            map { it * 2 }
+                .filter { it % 3 == 0 }
+                .take(1000)
+                .toList()
+        }
     }
 
     @Benchmark //avg 163.5 ops/ms
