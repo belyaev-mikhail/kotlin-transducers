@@ -42,10 +42,12 @@ inline fun <Acc, E1, E2> TransducerAlt<Acc, E1, E2>.take(n: Int): TransducerAlt<
 inline fun <Acc, E1, E2, E3> TransducerAlt<Acc, E1, E2>.flatMap(crossinline body: (E2) -> Iterable<E3>): TransducerAlt<Acc, E1, E3> =
     Transducers.combine(this, { reducer ->
         reducer@{ a, b ->
-            var acc: Acc? = a
-            if (b === null) return@reducer acc
-            for (e in body(b)) acc = reducer(acc, e) ?: break
-            acc
+            if (b === null) a
+            else {
+                var acc: Acc? = a
+                for (e in body(b)) acc = reducer(acc, e) ?: break
+                acc
+            }
         }
     })
 
@@ -53,10 +55,12 @@ inline fun <E, A, B> TransducerAlt<A, B, List<E>>.flatten(): TransducerAlt<A, B,
     Transducers.combine(this) { reducer -> reducer@ { a, b ->
         when {
             else -> {
-                var acc: A? = a
-                if (b === null) return@reducer acc
-                for (e in b) acc = reducer(acc, e) ?: break
-                acc
+                if (b === null) a
+                else {
+                    var acc: A? = a
+                    for (e in b) acc = reducer(acc, e) ?: break
+                    acc
+                }
             }
         }
     }}
